@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAFIJUR RAHMAN - Secure Cloud Storage</title>
+    <!-- Google Platform JS Load -->
+    <script src="https://google.com" async defer></script>
+    <script src="https://google.com" async defer></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { background-color: #1e293b; padding: 30px; border-radius: 12px; width: 100%; max-width: 450px; text-align: center; box-sizing: border-box; }
+        h1 { color: #38bdf8; margin-bottom: 5px; font-size: 24px; }
+        p.subtitle { color: #94a3b8; margin-top: 0; margin-bottom: 25px; font-size: 14px; }
+        h2 { color: #e2e8f0; font-size: 18px; margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; }
+        input[type="password"] { width: 100%; padding: 12px; border: 1px solid #334155; border-radius: 6px; background-color: #0f172a; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background-color: #0284c7; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        button:hover { background-color: #0369a1; }
+        .error-msg { color: #f43f5e; font-size: 13px; display: none; margin-top: 10px; }
+        .hidden { display: none !important; }
+        .vault-section { text-align: left; }
+        .logout-btn { background-color: #dc2626; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>NAFIJUR RAHMAN</h1>
+        <p class="subtitle">Personal Digital Cloud Vault</p>
+
+        <!-- লগইন সেকশন -->
+        <div id="login-section">
+            <h2>Enter Password</h2>
+            <div class="form-group">
+                <input type="password" id="password" placeholder="Enter Vault Password">
+            </div>
+            <button type="button" onclick="checkPassword()">Login</button>
+            <div id="error-message" class="error-msg">Wrong password! Try again.</div>
+        </div>
+
+        <!-- ভল্ট সেকশন -->
+        <div id="vault-section" class="vault-section hidden">
+            <h2>My Secure Cloud Vault</h2>
+            <div class="form-group" style="text-align: center;">
+                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 15px;">Google Drive-এর ফাইল দেখতে বা আপলোড করতে নিচের বাটনে চাপুন।</p>
+                <button type="button" id="auth-btn" onclick="handleAuthClick()">Connect Google Drive</button>
+                <button type="button" id="picker-btn" class="hidden" style="background-color: #10b981;" onclick="showPicker()">Open Vault & Upload</button>
+            </div>
+            <button type="button" class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <script>
+        const VAULT_PASSWORD = "135098301"; 
+        
+        const CLIENT_ID = '://googleusercontent.com'; 
+        const API_KEY = 'AIzaSyD4qixSGcKHkU59DXoJgPQkJDjPTZwnTyY'; 
+
+        const SCOPES = 'https://googleapis.com https://googleapis.com';
+        let tokenClient;
+        let accessToken = null;
+
+        function checkPassword() {
+            const passwordInput = document.getElementById('password').value.trim();
+            const errorMsg = document.getElementById('error-message');
+
+            if (passwordInput === VAULT_PASSWORD) {
+                errorMsg.style.display = 'none';
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('vault-section').classList.remove('hidden');
+                gisInit();
+            } else {
+                errorMsg.style.display = 'block';
+            }
+        }
+
+        function gisInit() {
+            gapi.load('client', async () => {
+                await gapi.client.init({ apiKey: API_KEY, discoveryDocs: ['https://googleapis.com'] });
+            });
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        accessToken = tokenResponse.access_token;
+                        document.getElementById('auth-btn').classList.add('hidden');
+                        document.getElementById('picker-btn').classList.remove('hidden');
+                    }
+                },
+            });
+        }
+
+        function handleAuthClick() {
+            tokenClient.requestAccessToken({ prompt: accessToken === null ? 'consent' : '' });
+        }
+
+        // গুগল পিকার ডোমেইন ভেরিফিকেশন ফিক্সড করা হয়েছে
+        function showPicker() {
+            gapi.load('picker', () => {
+                const view = new google.picker.DocsView(google.picker.ViewId.DOCS).setMimeTypes('application/pdf,image/*');
+                const picker = new google.picker.PickerBuilder()
+                    .addView(view)
+                    .addView(new google.picker.DocsUploadView()) 
+                    .setDeveloperKey(API_KEY)
+                    .setOAuthToken(accessToken)
+                    .setCallback((data) => {
+                        if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
+                            const doc = data[google.picker.Response.DOCUMENTS];
+                            window.open(doc[google.picker.Document.URL], '_blank');
+                        }
+                    }).build();
+                picker.setVisible(true);
+            });
+        }
+
+        function logout() {
+            if (accessToken) { google.accounts.oauth2.revokeToken(accessToken); accessToken = null; }
+            document.getElementById('password').value = "";
+            document.getElementById('picker-btn').classList.add('hidden');
+            document.getElementById('auth-btn').classList.remove('hidden');
+            document.getElementById('vault-section').classList.add('hidden');
+            document.getElementById('login-section').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
