@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NAFIJUR RAHMAN - Secure Cloud Storage</title>
-    <!-- Google Platform JS Load -->
-    <script src="https://google.com" async defer></script>
-    <script src="https://google.com" async defer></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         .container { background-color: #1e293b; padding: 30px; border-radius: 12px; width: 100%; max-width: 450px; text-align: center; box-sizing: border-box; }
@@ -29,7 +26,6 @@
         <h1>NAFIJUR RAHMAN</h1>
         <p class="subtitle">Personal Digital Cloud Vault</p>
 
-        <!-- লগইন সেকশন -->
         <div id="login-section">
             <h2>Enter Password</h2>
             <div class="form-group">
@@ -39,7 +35,6 @@
             <div id="error-message" class="error-msg">Wrong password! Try again.</div>
         </div>
 
-        <!-- ভল্ট সেকশন -->
         <div id="vault-section" class="vault-section hidden">
             <h2>My Secure Cloud Vault</h2>
             <div class="form-group" style="text-align: center;">
@@ -53,13 +48,56 @@
 
     <script>
         const VAULT_PASSWORD = "135098301"; 
-        
         const CLIENT_ID = '://googleusercontent.com'; 
         const API_KEY = 'AIzaSyD4qixSGcKHkU59DXoJgPQkJDjPTZwnTyY'; 
-
         const SCOPES = 'https://googleapis.com https://googleapis.com';
-        let tokenClient;
+        
+        let tokenClient = null;
         let accessToken = null;
+        let gapiInited = false;
+        let gisInited = false;
+
+        function loadGoogleScripts() {
+            if (document.getElementById('gapi-script')) return;
+
+            const gapiScript = document.createElement('script');
+            gapiScript.id = 'gapi-script';
+            gapiScript.src = 'https://google.com';
+            gapiScript.onload = () => {
+                gapi.load('client', () => {
+                    gapi.client.init({ apiKey: API_KEY, discoveryDocs: ['https://googleapis.com'] })
+                    .then(() => {
+                        gapiInited = true;
+                    });
+                });
+            };
+            document.head.appendChild(gapiScript);
+
+            const gisScript = document.createElement('script');
+            gisScript.id = 'gis-script';
+            gisScript.src = 'https://google.com';
+            gisScript.onload = () => {
+                try {
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: CLIENT_ID,
+                        scope: SCOPES,
+                        callback: (tokenResponse) => {
+                            if (tokenResponse && tokenResponse.access_token) {
+                                accessToken = tokenResponse.access_token;
+                                document.getElementById('auth-btn').classList.add('hidden');
+                                document.getElementById('picker-btn').classList.remove('hidden');
+                            }
+                        },
+                    });
+                    gisInited = true;
+                } catch (e) {
+                    console.error("GIS init error:", e);
+                }
+            };
+            document.head.appendChild(gisScript);
+        }
+
+        window.onload = loadGoogleScripts;
 
         function checkPassword() {
             const passwordInput = document.getElementById('password').value.trim();
@@ -69,35 +107,24 @@
                 errorMsg.style.display = 'none';
                 document.getElementById('login-section').classList.add('hidden');
                 document.getElementById('vault-section').classList.remove('hidden');
-                gisInit();
             } else {
                 errorMsg.style.display = 'block';
             }
         }
 
-        function gisInit() {
-            gapi.load('client', async () => {
-                await gapi.client.init({ apiKey: API_KEY, discoveryDocs: ['https://googleapis.com'] });
-            });
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: (tokenResponse) => {
-                    if (tokenResponse && tokenResponse.access_token) {
-                        accessToken = tokenResponse.access_token;
-                        document.getElementById('auth-btn').classList.add('hidden');
-                        document.getElementById('picker-btn').classList.remove('hidden');
-                    }
-                },
-            });
-        }
-
         function handleAuthClick() {
-            tokenClient.requestAccessToken({ prompt: accessToken === null ? 'consent' : '' });
+            if (!gisInited || !tokenClient) {
+                alert("Google connection is syncing. Please wait 2 seconds and click again!");
+                loadGoogleScripts();
+                return;
+            }
+            tokenClient.requestAccessToken({ prompt: 'select_account' });
         }
 
-        // গুগল পিকার ডোমেইন ভেরিফিকেশন ফিক্সড করা হয়েছে
         function showPicker() {
+            if (!accessToken) return alert("Please authorize Google Drive first.");
+            if (!gapiInited) return alert("Google components are still syncing. Please wait 2 seconds.");
+            
             gapi.load('picker', () => {
                 const view = new google.picker.DocsView(google.picker.ViewId.DOCS).setMimeTypes('application/pdf,image/*');
                 const picker = new google.picker.PickerBuilder()
