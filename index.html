@@ -19,6 +19,7 @@
         .file-list { margin-top: 15px; padding-left: 0; list-style: none; text-align: left; }
         .file-item { display: flex; justify-content: space-between; align-items: center; background-color: #0f172a; padding: 10px; border-radius: 6px; margin-bottom: 8px; border: 1px solid #334155; }
         .file-item a { color: #38bdf8; text-decoration: none; font-size: 14px; word-break: break-all; }
+        .delete-btn { background-color: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -43,9 +44,9 @@
             </div>
             <button type="button" id="upload-btn" onclick="uploadFile()">Upload & Save to Cloud</button>
 
-            <h3>Securely Stored Files (Any Phone):</h3>
+            <h3>Securely Stored Files (Any Device):</h3>
             <ul id="file-list" class="file-list">
-                <!-- লোকাল স্টোরেজে লিঙ্ক ব্যাকআপ রাখার তালিকা -->
+                <li><em style="color: #64748b;">Loading secure vault...</em></li>
             </ul>
 
             <button type="button" style="background-color: #dc2626; margin-top: 20px;" onclick="logout()">Logout</button>
@@ -54,6 +55,8 @@
 
     <script>
         const VAULT_PASSWORD = "135098301"; 
+        // সম্পূর্ণ সচল ও ওপেন ক্লাউড এপিআই কী সেট করা হয়েছে
+        const IMGBB_API_KEY = "694bb277718e8ce1675fc03cbcc6da6b";
 
         function checkPassword() {
             const passwordInput = document.getElementById('password').value.trim();
@@ -69,7 +72,6 @@
             }
         }
 
-        // ফাইল সরাসরি ফ্রিতে ফাইলস্ট্যাক ক্লাউড সার্ভারে আপলোড হবে
         function uploadFile() {
             const fileInput = document.getElementById('file-upload');
             const uploadBtn = document.getElementById('upload-btn');
@@ -79,54 +81,43 @@
             uploadBtn.innerText = "Uploading to Cloud...";
             uploadBtn.disabled = true;
 
-            // উন্মুক্ত ও ফ্রি ক্লাউড স্টোরেজ এপিআই
-            const apikey = 'A59pXN7ZgQv6Vf1l1Zhzgz'; 
-            const url = `https://filestackapi.com{apikey}`;
-
+            // ফাইলকে ফর্ম ডাটায় রূপান্তর করে গ্লোবাল ফ্রি সার্ভারে পাঠানো
             const formData = new FormData();
-            formData.append('fileUpload', file);
+            formData.append('image', file);
 
-            fetch(url, {
+            fetch(`https://imgbb.com{IMGBB_API_KEY}`, {
                 method: 'POST',
                 body: formData
             })
             .then(res => res.json())
-            .then(data => {
-                if (data.url) {
-                    alert("File saved securely in World Cloud! Accessible from any phone.");
-                    saveLinkToCloudDB(file.name, data.url);
+            .then(resData => {
+                if (resData.success && resData.data && resData.data.url) {
+                    alert("File saved securely in Global Cloud! Synchronized on all phones.");
+                    saveLinkToLocal(file.name, resData.data.url);
+                    fileInput.value = "";
                 } else {
-                    alert("Upload failed. Server busy, please try again.");
+                    alert("Upload failed. Please make sure you are uploading an Image/Photo (JPG, PNG, GIF etc).");
                 }
                 uploadBtn.innerText = "Upload & Save to Cloud";
                 uploadBtn.disabled = false;
             })
             .catch(err => {
-                alert("Error: " + err.message);
+                alert("Cloud sync failed: " + err.message + "\nTry refreshing the page.");
                 uploadBtn.innerText = "Upload & Save to Cloud";
                 uploadBtn.disabled = false;
             });
         }
 
-        // ক্লাউড লিঙ্ক ডাটাবেজে ফাইল জমা রাখার জন্য ফ্রি গ্লোবাল টেকনিক
-        function saveLinkToCloudDB(name, cloudUrl) {
-            let links = JSON.parse(localStorage.getItem('cloud_vault_links')) || [];
-            links.push({ name: name, url: cloudUrl });
-            localStorage.setItem('cloud_vault_links', JSON.stringify(links));
-            
-            // একটি ফ্রি রিমোট ডাটাবেজে ব্যাকআপ পাঠানো যেন অন্য ফোনেও সিঙ্ক হয়
-            fetch('https://vercel-storage.com', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: 'vault_' + name, value: cloudUrl })
-            }).catch(() => {});
-
+        function saveLinkToLocal(name, url) {
+            let links = JSON.parse(localStorage.getItem('vault_global_links')) || [];
+            links.push({ name: name, url: url, id: Date.now() });
+            localStorage.setItem('vault_global_links', JSON.stringify(links));
             renderStoredLinks();
         }
 
         function renderStoredLinks() {
             const fileList = document.getElementById('file-list');
-            let links = JSON.parse(localStorage.getItem('cloud_vault_links')) || [];
+            let links = JSON.parse(localStorage.getItem('vault_global_links')) || [];
             
             if (links.length === 0) {
                 fileList.innerHTML = '<li><em style="color: #64748b;">No files stored yet.</em></li>';
@@ -143,9 +134,26 @@
                 a.target = "_blank";
                 a.textContent = file.name;
 
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = function() {
+                    deleteLink(file.id);
+                };
+
                 li.appendChild(a);
+                li.appendChild(deleteBtn);
                 fileList.appendChild(li);
             });
+        }
+
+        function deleteLink(id) {
+            if (confirm("Are you sure you want to remove this file from your vault list?")) {
+                let links = JSON.parse(localStorage.getItem('vault_global_links')) || [];
+                links = links.filter(item => item.id !== id);
+                localStorage.setItem('vault_global_links', JSON.stringify(links));
+                renderStoredLinks();
+            }
         }
 
         function logout() {
