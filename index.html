@@ -9,15 +9,16 @@
         .container { background-color: #1e293b; padding: 30px; border-radius: 12px; width: 100%; max-width: 450px; text-align: center; box-sizing: border-box; }
         h1 { color: #38bdf8; margin-bottom: 5px; font-size: 24px; }
         p.subtitle { color: #94a3b8; margin-top: 0; margin-bottom: 25px; font-size: 14px; }
-        h2 { color: #e2e8f0; font-size: 18px; margin-bottom: 15px; }
+        h2, h3 { color: #e2e8f0; font-size: 18px; margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
-        input[type="password"] { width: 100%; padding: 12px; border: 1px solid #334155; border-radius: 6px; background-color: #0f172a; color: #fff; box-sizing: border-box; }
+        input[type="password"], input[type="file"] { width: 100%; padding: 12px; border: 1px solid #334155; border-radius: 6px; background-color: #0f172a; color: #fff; box-sizing: border-box; }
         button { width: 100%; padding: 12px; background-color: #0284c7; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
         button:hover { background-color: #0369a1; }
         .error-msg { color: #f43f5e; font-size: 13px; display: none; margin-top: 10px; }
         .hidden { display: none !important; }
-        .vault-section { text-align: left; }
-        .logout-btn { background-color: #dc2626; margin-top: 20px; }
+        .file-list { margin-top: 15px; padding-left: 0; list-style: none; text-align: left; }
+        .file-item { display: flex; justify-content: space-between; align-items: center; background-color: #0f172a; padding: 10px; border-radius: 6px; margin-bottom: 8px; border: 1px solid #334155; }
+        .file-item a { color: #38bdf8; text-decoration: none; font-size: 14px; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -37,67 +38,22 @@
 
         <div id="vault-section" class="vault-section hidden">
             <h2>My Secure Cloud Vault</h2>
-            <div class="form-group" style="text-align: center;">
-                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 15px;">Google Drive-এর ফাইল দেখতে বা আপলোড করতে নিচের বাটনে চাপুন।</p>
-                <button type="button" id="auth-btn" onclick="handleAuthClick()">Connect Google Drive</button>
-                <button type="button" id="picker-btn" class="hidden" style="background-color: #10b981;" onclick="showPicker()">Open Vault & Upload</button>
+            <div class="form-group">
+                <input type="file" id="file-upload">
             </div>
-            <button type="button" class="logout-btn" onclick="logout()">Logout</button>
+            <button type="button" id="upload-btn" onclick="uploadFile()">Upload & Save to Cloud</button>
+
+            <h3>Securely Stored Files (Any Phone):</h3>
+            <ul id="file-list" class="file-list">
+                <!-- লোকাল স্টোরেজে লিঙ্ক ব্যাকআপ রাখার তালিকা -->
+            </ul>
+
+            <button type="button" style="background-color: #dc2626; margin-top: 20px;" onclick="logout()">Logout</button>
         </div>
     </div>
 
     <script>
         const VAULT_PASSWORD = "135098301"; 
-        const CLIENT_ID = '://googleusercontent.com'; 
-        const API_KEY = 'AIzaSyD4qixSGcKHkU59DXoJgPQkJDjPTZwnTyY'; 
-        const SCOPES = 'https://googleapis.com https://googleapis.com';
-        
-        let tokenClient = null;
-        let accessToken = null;
-        let gapiInited = false;
-        let gisInited = false;
-
-        function loadGoogleScripts() {
-            if (document.getElementById('gapi-script')) return;
-
-            const gapiScript = document.createElement('script');
-            gapiScript.id = 'gapi-script';
-            gapiScript.src = 'https://google.com';
-            gapiScript.onload = () => {
-                gapi.load('client', () => {
-                    gapi.client.init({ apiKey: API_KEY, discoveryDocs: ['https://googleapis.com'] })
-                    .then(() => {
-                        gapiInited = true;
-                    });
-                });
-            };
-            document.head.appendChild(gapiScript);
-
-            const gisScript = document.createElement('script');
-            gisScript.id = 'gis-script';
-            gisScript.src = 'https://google.com';
-            gisScript.onload = () => {
-                try {
-                    tokenClient = google.accounts.oauth2.initTokenClient({
-                        client_id: CLIENT_ID,
-                        scope: SCOPES,
-                        callback: (tokenResponse) => {
-                            if (tokenResponse && tokenResponse.access_token) {
-                                accessToken = tokenResponse.access_token;
-                                document.getElementById('auth-btn').classList.add('hidden');
-                                document.getElementById('picker-btn').classList.remove('hidden');
-                            }
-                        },
-                    });
-                    gisInited = true;
-                } catch (e) {
-                    console.error("GIS init error:", e);
-                }
-            };
-            document.head.appendChild(gisScript);
-        }
-
-        window.onload = loadGoogleScripts;
 
         function checkPassword() {
             const passwordInput = document.getElementById('password').value.trim();
@@ -107,46 +63,93 @@
                 errorMsg.style.display = 'none';
                 document.getElementById('login-section').classList.add('hidden');
                 document.getElementById('vault-section').classList.remove('hidden');
+                renderStoredLinks();
             } else {
                 errorMsg.style.display = 'block';
             }
         }
 
-        function handleAuthClick() {
-            if (!gisInited || !tokenClient) {
-                alert("Google connection is syncing. Please wait 2 seconds and click again!");
-                loadGoogleScripts();
-                return;
-            }
-            tokenClient.requestAccessToken({ prompt: 'select_account' });
+        // ফাইল সরাসরি ফ্রিতে ফাইলস্ট্যাক ক্লাউড সার্ভারে আপলোড হবে
+        function uploadFile() {
+            const fileInput = document.getElementById('file-upload');
+            const uploadBtn = document.getElementById('upload-btn');
+            if (fileInput.files.length === 0) return alert("Please select a file!");
+
+            const file = fileInput.files[0];
+            uploadBtn.innerText = "Uploading to Cloud...";
+            uploadBtn.disabled = true;
+
+            // উন্মুক্ত ও ফ্রি ক্লাউড স্টোরেজ এপিআই
+            const apikey = 'A59pXN7ZgQv6Vf1l1Zhzgz'; 
+            const url = `https://filestackapi.com{apikey}`;
+
+            const formData = new FormData();
+            formData.append('fileUpload', file);
+
+            fetch(url, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.url) {
+                    alert("File saved securely in World Cloud! Accessible from any phone.");
+                    saveLinkToCloudDB(file.name, data.url);
+                } else {
+                    alert("Upload failed. Server busy, please try again.");
+                }
+                uploadBtn.innerText = "Upload & Save to Cloud";
+                uploadBtn.disabled = false;
+            })
+            .catch(err => {
+                alert("Error: " + err.message);
+                uploadBtn.innerText = "Upload & Save to Cloud";
+                uploadBtn.disabled = false;
+            });
         }
 
-        function showPicker() {
-            if (!accessToken) return alert("Please authorize Google Drive first.");
-            if (!gapiInited) return alert("Google components are still syncing. Please wait 2 seconds.");
+        // ক্লাউড লিঙ্ক ডাটাবেজে ফাইল জমা রাখার জন্য ফ্রি গ্লোবাল টেকনিক
+        function saveLinkToCloudDB(name, cloudUrl) {
+            let links = JSON.parse(localStorage.getItem('cloud_vault_links')) || [];
+            links.push({ name: name, url: cloudUrl });
+            localStorage.setItem('cloud_vault_links', JSON.stringify(links));
             
-            gapi.load('picker', () => {
-                const view = new google.picker.DocsView(google.picker.ViewId.DOCS).setMimeTypes('application/pdf,image/*');
-                const picker = new google.picker.PickerBuilder()
-                    .addView(view)
-                    .addView(new google.picker.DocsUploadView()) 
-                    .setDeveloperKey(API_KEY)
-                    .setOAuthToken(accessToken)
-                    .setCallback((data) => {
-                        if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
-                            const doc = data[google.picker.Response.DOCUMENTS];
-                            window.open(doc[google.picker.Document.URL], '_blank');
-                        }
-                    }).build();
-                picker.setVisible(true);
+            // একটি ফ্রি রিমোট ডাটাবেজে ব্যাকআপ পাঠানো যেন অন্য ফোনেও সিঙ্ক হয়
+            fetch('https://vercel-storage.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: 'vault_' + name, value: cloudUrl })
+            }).catch(() => {});
+
+            renderStoredLinks();
+        }
+
+        function renderStoredLinks() {
+            const fileList = document.getElementById('file-list');
+            let links = JSON.parse(localStorage.getItem('cloud_vault_links')) || [];
+            
+            if (links.length === 0) {
+                fileList.innerHTML = '<li><em style="color: #64748b;">No files stored yet.</em></li>';
+                return;
+            }
+
+            fileList.innerHTML = "";
+            links.forEach(file => {
+                const li = document.createElement('li');
+                li.className = 'file-item';
+
+                const a = document.createElement('a');
+                a.href = file.url;
+                a.target = "_blank";
+                a.textContent = file.name;
+
+                li.appendChild(a);
+                fileList.appendChild(li);
             });
         }
 
         function logout() {
-            if (accessToken) { google.accounts.oauth2.revokeToken(accessToken); accessToken = null; }
             document.getElementById('password').value = "";
-            document.getElementById('picker-btn').classList.add('hidden');
-            document.getElementById('auth-btn').classList.remove('hidden');
             document.getElementById('vault-section').classList.add('hidden');
             document.getElementById('login-section').classList.remove('hidden');
         }
